@@ -1,0 +1,19 @@
+# Dependency directories
+node_modules/
+
+# Production build
+dist/
+build/
+
+# Local env files
+.env
+
+# But keep example env
+!.env.example
+
+# Editor directories and files
+.vscode/
+.idea/
+
+# Mac system files
+.DS_Store

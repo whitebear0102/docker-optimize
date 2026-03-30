@@ -1,0 +1,18 @@
+# Sử dụng image Node đầy đủ (dựa trên Debian)
+FROM node:20
+
+WORKDIR /usr/src/app
+
+# Copy toàn bộ code vào
+COPY . .
+
+# Cài đặt tất cả dependencies (bao gồm cả devDependencies)
+RUN npm install
+
+# Build TypeScript sang JS
+RUN npm run build
+
+EXPOSE 3000
+
+# Chạy bằng npm (kéo theo nhiều process phụ)
+CMD ["npm", "run", "start:prod"]
