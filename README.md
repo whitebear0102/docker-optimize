@@ -1,98 +1,55 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 📋 Tóm Tắt Kỹ Thuật Tối Ưu Hóa Docker cho NestJS
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Tài liệu này ghi lại quá trình tối ưu hóa Docker Image cho ứng dụng NestJS, giúp giảm dung lượng từ **1.98GB** xuống còn **~227MB** (tiết kiệm gần 90% bộ nhớ).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🚀 1. Hai "Chìa Khóa" Tối Ưu Chính
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+### A. Sử dụng Base Image Alpine (`node:20-alpine`)
+* **Cơ chế:** Thay vì dùng bản Node mặc định (dựa trên Debian/Ubuntu nặng nề), chúng ta dùng **Alpine Linux** - một bản phân phối siêu tối giản chỉ nặng khoảng 5MB.
+* **Tại sao hiệu quả:** Nó loại bỏ tất cả các công cụ hệ thống thừa thãi (như trình quản lý gói apt, trình biên dịch, các thư viện mạng không dùng tới).
+* **Kết quả:** Giảm ngay lập tức ~300MB - 500MB dung lượng OS nền và tăng tính bảo mật.
 
-## Project setup
+### B. Kỹ thuật Multi-stage Build (Xây dựng đa tầng)
+* **Cơ chế:** Chia Dockerfile thành nhiều giai đoạn (Stages):
+    1.  **Stage Builder:** Dùng image đầy đủ để cài TypeScript, Nest-CLI và biên dịch code `.ts` sang `.js`.
+    2.  **Stage Production:** Tạo một image mới "sạch" hoàn toàn, chỉ **COPY** thư mục `dist` và `node_modules` cần thiết sang.
+* **Tại sao hiệu quả:** Toàn bộ "rác" phát sinh khi build (source code gốc, compiler, devDependencies, npm cache) đều bị bỏ lại ở Stage cũ, không nằm trong image cuối cùng.
 
-```bash
-$ npm install
-```
+---
 
-## Compile and run the project
+## 🛠️ 2. Các Bước Cấu Hình Quan Trọng
 
-```bash
-# development
-$ npm run start
+### 📝 Tối ưu TypeScript (`tsconfig.json`)
+Cần đảm bảo cấu hình chuẩn để thư mục build gọn gàng:
+* **`rootDir: "src"`**: Ép TypeScript hiểu `src` là gốc, giúp file chính nằm ngay tại `dist/main.js` thay vì bị lồng trong `dist/src/main.js`.
+* **`removeComments: true`**: Xóa chú thích để code JS nhẹ hơn.
+* **`sourceMap: false`**: Tắt file bản đồ code (không cần thiết ở môi trường chạy thực tế).
 
-# watch mode
-$ npm run start:dev
+### 🐳 Dockerfile Optimize (Cấu trúc 3 giai đoạn)
+Đây là công thức "vàng" để có image siêu nhẹ:
 
-# production mode
-$ npm run start:prod
-```
+```dockerfile
+# STAGE 1: Build source code
+FROM node:20-alpine AS builder
+WORKDIR /usr/src/app
+COPY package*.json ./
+RUN npm ci --legacy-peer-deps 
+COPY . .
+RUN npm run build
 
-## Run tests
+# STAGE 2: Lọc thư viện (Production only)
+FROM node:20-alpine AS secondary
+WORKDIR /usr/src/app
+COPY package*.json ./
+RUN npm ci --only=production --legacy-peer-deps
 
-```bash
-# unit tests
-$ npm run test
+# STAGE 3: Image cuối cùng (Siêu nhẹ)
+FROM node:20-alpine AS production
+WORKDIR /usr/src/app
+COPY --from=secondary /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/dist ./dist
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+EXPOSE 3000
+CMD ["node", "dist/main"]

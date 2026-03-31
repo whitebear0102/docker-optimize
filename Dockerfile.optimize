@@ -3,18 +3,18 @@ FROM node:20-alpine AS builder
 WORKDIR /usr/src/app
 
 COPY package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 COPY . .
 RUN npm run build
 
 # --- STAGE 2: Clean Dependencies ---
 FROM node:20-alpine AS secondary
-WORKDIR /usr/src/app
+WORKDIR /usr/src/app  
 
 COPY package*.json ./
 # Chỉ cài thư viện cần để CHẠY, loại bỏ compiler, linter, test...
-RUN npm install --only=production
+RUN npm install --only=production --legacy-peer-deps
 
 # --- STAGE 3: Final Production Image ---
 FROM node:20-alpine AS production
@@ -23,6 +23,9 @@ WORKDIR /usr/src/app
 # Chỉ copy những thứ thực sự cần thiết từ các stage trước
 COPY --from=secondary /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/dist ./dist
+
+# Kiểm tra xem main.js có tồn tại không khi build (lệnh này sẽ báo lỗi ngay khi build nếu thiếu file)
+RUN ls -l ./dist/main.js
 
 EXPOSE 3000
 

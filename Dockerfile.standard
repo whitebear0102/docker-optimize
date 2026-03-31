@@ -7,7 +7,7 @@ WORKDIR /usr/src/app
 COPY . .
 
 # Cài đặt tất cả dependencies (bao gồm cả devDependencies)
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Build TypeScript sang JS
 RUN npm run build
